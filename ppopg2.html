@@ -26,6 +26,8 @@
             --line-color: #4a5568;
             --toggle-bg: #e2e8f0;
             --toggle-text: #2d3748;
+            --text-axes-color: #6b7280;
+            --remove-btn-light: #f56565;
         }
         
         body.dark-mode {
@@ -45,6 +47,8 @@
             --line-color: #f7fafc;
             --toggle-bg: rgba(255, 255, 255, 0.1);
             --toggle-text: #f7fafc;
+            --text-axes-color: #e2e8f0; /* Adjusted for brightness on the graph */
+            --remove-btn-dark: rgba(244, 63, 94, 0.8);
         }
 
         body {
@@ -192,7 +196,7 @@
         .remove-leg-btn {
             background: none;
             border: none;
-            color: #f56565;
+            color: var(--remove-btn-light);
             font-size: 2rem;
             font-weight: bold;
             line-height: 1;
@@ -204,11 +208,11 @@
         }
         
         body.dark-mode .remove-leg-btn {
-            color: rgba(244, 63, 94, 0.8);
+            color: var(--remove-btn-dark);
         }
 
         body.dark-mode .remove-leg-btn:hover {
-            color: rgba(244, 63, 94, 1);
+            color: #e53e3e;
         }
 
         .brand {
@@ -268,7 +272,7 @@
             border-radius: 8px;
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            color: #2d3748;
+            color: var(--toggle-text);
             padding: 0.5rem 0.75rem;
             font-size: 0.875rem;
             font-weight: 500;
@@ -555,6 +559,8 @@
             function drawPayoffDiagram() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+                const textAxesColor = getComputedStyle(body).getPropertyValue('--text-axes-color');
+
                 const spotPrice = parseFloat(spotPriceInput.value);
                 const legs = Array.from(legsContainer.children).map(legDiv => {
                     const strike = parseFloat(legDiv.querySelector('.leg-strike').value);
@@ -594,14 +600,14 @@
                 if (points.length === 0 || !isFinite(spotPrice) || !isFinite(minPrice) || !isFinite(maxPrice)) {
                     const originX = padding;
                     const originY = padding + canvasHeight;
-                    ctx.strokeStyle = '#9ca3af'; 
+                    ctx.strokeStyle = textAxesColor; 
                     ctx.lineWidth = 1; 
                     ctx.beginPath();
                     ctx.moveTo(originX, originY);
                     ctx.lineTo(originX + canvasWidth, originY);
                     ctx.stroke();
 
-                    ctx.fillStyle = '#6b7280';
+                    ctx.fillStyle = textAxesColor;
                     ctx.font = '12px Inter';
                     ctx.textAlign = 'center';
                     ctx.fillText('Please enter valid numerical inputs to draw the chart.', canvas.width / 2, canvas.height / 2);
@@ -615,7 +621,7 @@
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     ctx.font = '16px Inter';
                     ctx.textAlign = 'center';
-                    ctx.fillStyle = '#6b7280';
+                    ctx.fillStyle = textAxesColor;
                     ctx.fillText('Please enter valid numerical inputs to draw the chart.', canvas.width / 2, canvas.height / 2);
                     return;
                 }
@@ -628,7 +634,7 @@
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     ctx.font = '16px Inter';
                     ctx.textAlign = 'center';
-                    ctx.fillStyle = '#6b7280';
+                    ctx.fillStyle = textAxesColor;
                     ctx.fillText('Chart could not be rendered with the provided values.', canvas.width / 2, canvas.height / 2);
                     return;
                 }
@@ -669,7 +675,7 @@
                 ctx.restore();
 
                 ctx.save();
-                ctx.strokeStyle = '#9ca3af'; 
+                ctx.strokeStyle = textAxesColor; 
                 ctx.lineWidth = 1; 
 
                 ctx.beginPath();
@@ -700,7 +706,7 @@
                 });
                 ctx.stroke();
 
-                ctx.fillStyle = '#6b7280';
+                ctx.fillStyle = textAxesColor;
                 ctx.font = '12px Inter';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
