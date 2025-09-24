@@ -33,6 +33,11 @@
             background-color: #ffffff;
             border-radius: 0.5rem;
             position: relative;
+            cursor: grab;
+        }
+        
+        canvas.grabbing {
+            cursor: grabbing;
         }
 
         .input-group input, .input-group select {
@@ -113,9 +118,55 @@
             margin-top: 0.5rem;
             text-align: center;
         }
+
+        .brand {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #4a5568;
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .chart-controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 20;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .chart-controls button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            color: #2d3748;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+            transition: background 0.3s ease, box-shadow 0.3s ease, transform 0.1s ease;
+        }
+
+        .chart-controls button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .chart-controls button:active {
+            transform: translateY(1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 flex items-center justify-center p-4 min-h-screen">
+    <div class="brand">- for Prem Punjabi</div>
 
     <div class="container mx-auto p-8 rounded-xl shadow-lg">
         <h1 class="text-3xl font-bold mb-6 text-center title">Options Payoff Diagram</h1>
@@ -165,7 +216,7 @@
                                 <span class="input-label">Buy / Sell</span>
                             </div>
                             <div class="flex flex-col items-center w-1/3">
-                                <input type="number" class="leg-premium w-full" value="110" placeholder="Premium">
+                                <input type="number" class="leg-premium w-full" placeholder="Premium" value="110">
                                 <span class="input-label">Premium</span>
                             </div>
                         </div>
@@ -178,8 +229,13 @@
         </div>
         
         <!-- Canvas for the payoff diagram and tooltip container -->
-        <div class="relative w-full h-96 mt-6">
-            <canvas id="payoffCanvas" class="w-full h-full border-2 border-gray-300 rounded-lg"></canvas>
+        <div class="relative w-full mt-6">
+            <div class="chart-controls">
+                <button id="zoomInBtn">+</button>
+                <button id="zoomOutBtn">-</button>
+                <button id="resetBtn">Reset</button>
+            </div>
+            <canvas id="payoffCanvas" class="w-full border-2 border-gray-300 rounded-lg"></canvas>
             <div id="tooltip" class="absolute hidden"></div>
         </div>
     </div>
@@ -191,24 +247,29 @@
             const legsContainer = document.getElementById('legsContainer');
             const addLegBtn = document.getElementById('addLegBtn');
             const fetchPriceBtn = document.getElementById('fetchPriceBtn');
+            const spotPriceInput = document.getElementById('spotPrice');
             const tooltip = document.getElementById('tooltip');
+            const zoomInBtn = document.getElementById('zoomInBtn');
+            const zoomOutBtn = document.getElementById('zoomOutBtn');
+            const resetBtn = document.getElementById('resetBtn');
+
             let legCounter = 1;
-            
             let hoverPrice = null;
+            let chartState = { minPrice: 0, maxPrice: 0, chartMinY: 0, chartMaxY: 0, initialMinY: 0, initialMaxY: 0 };
+            let isDragging = false;
+            let lastMouseX = 0;
+            let lastMouseY = 0;
 
             function resizeCanvas() {
                 canvas.width = canvas.offsetWidth;
-                canvas.height = canvas.offsetHeight;
+                canvas.height = canvas.width / (16 / 10);
                 drawPayoffDiagram();
             }
             
             function fetchNiftyPrice() {
-                // This function simulates fetching a live price.
-                // Due to the lack of a free, public API for real-time stock data,
-                // we are generating a random price to demonstrate the functionality.
-                const currentPrice = parseFloat(document.getElementById('spotPrice').value);
+                const currentPrice = parseFloat(spotPriceInput.value);
                 const newPrice = currentPrice + (Math.random() * 50 - 25);
-                document.getElementById('spotPrice').value = newPrice.toFixed(2);
+                spotPriceInput.value = newPrice.toFixed(2);
                 drawPayoffDiagram();
             }
 
@@ -230,13 +291,106 @@
                 return pl * numberOfLots * lotSize;
             }
 
-            // Function to draw the payoff diagram
+            function getNiceTickInterval(range, maxTicks) {
+                const rawInterval = range / maxTicks;
+                const powerOf10 = Math.pow(10, Math.floor(Math.log10(rawInterval)));
+                const niceNumbers = [1, 2, 5];
+                let niceInterval = Infinity;
+                
+                for (let i = 0; i < niceNumbers.length; i++) {
+                    const currentNice = niceNumbers[i] * powerOf10;
+                    if (currentNice >= rawInterval) {
+                        niceInterval = currentNice;
+                        break;
+                    }
+                }
+
+                if (niceInterval === Infinity) {
+                    niceInterval = 10 * powerOf10;
+                }
+                
+                return niceInterval;
+            }
+
+            function calculateInitialPriceRange() {
+                const spotPrice = parseFloat(spotPriceInput.value);
+                const legs = Array.from(legsContainer.children).map(legDiv => {
+                    const strike = parseFloat(legDiv.querySelector('.leg-strike').value);
+                    const premium = parseFloat(legDiv.querySelector('.leg-premium').value);
+                    const numberOfLots = parseFloat(legDiv.querySelector('.leg-lots').value);
+                    const lotSize = parseFloat(legDiv.querySelector('.leg-lot-size').value);
+                    return { strike, premium, numberOfLots, lotSize };
+                });
+                
+                let totalPremium = 0;
+                let minStrike = Infinity;
+                let maxStrike = -Infinity;
+                
+                legs.forEach(leg => {
+                    if (!isNaN(leg.premium) && !isNaN(leg.numberOfLots) && !isNaN(leg.lotSize)) {
+                        totalPremium += leg.premium;
+                    }
+                    if (!isNaN(leg.strike)) {
+                        minStrike = Math.min(minStrike, leg.strike);
+                        maxStrike = Math.max(maxStrike, leg.strike);
+                    }
+                });
+
+                const premiumBuffer = totalPremium * 2;
+                let minPrice = (minStrike === Infinity) ? spotPrice - 300 : minStrike - premiumBuffer;
+                let maxPrice = (maxStrike === -Infinity) ? spotPrice + 300 : maxStrike + premiumBuffer;
+                
+                if (minStrike === Infinity || maxStrike === -Infinity) {
+                  minPrice = spotPrice - 300;
+                  maxPrice = spotPrice + 300;
+                }
+
+                chartState.minPrice = minPrice;
+                chartState.maxPrice = maxPrice;
+
+                const priceStep = 1;
+                const points = [];
+                
+                for (let price = minPrice; price <= maxPrice; price += priceStep) {
+                    let pl = 0;
+                    legs.forEach(leg => {
+                        if (!isNaN(leg.strike) && !isNaN(leg.premium) && !isNaN(leg.numberOfLots) && !isNaN(leg.lotSize)) {
+                            pl += calculateLegPL(price, leg.action, leg.type, leg.strike, leg.premium, leg.numberOfLots, leg.lotSize);
+                        }
+                    });
+                    points.push({ x: price, y: pl });
+                }
+
+                if (points.length > 0) {
+                    const allY = points.map(p => p.y);
+                    let minY = Math.min(...allY);
+                    let maxY = Math.max(...allY);
+                    
+                    const yRange = maxY - minY;
+                    let chartMinY = minY - yRange * 0.1;
+                    let chartMaxY = maxY + yRange * 0.1;
+
+                    if (yRange === 0) {
+                        chartMinY -= 100;
+                        chartMaxY += 100;
+                    }
+                    
+                    chartState.chartMinY = chartMinY;
+                    chartState.chartMaxY = chartMaxY;
+                    chartState.initialMinY = chartMinY;
+                    chartState.initialMaxY = chartMaxY;
+                } else {
+                    chartState.chartMinY = -1000;
+                    chartState.chartMaxY = 1000;
+                    chartState.initialMinY = -1000;
+                    chartState.initialMaxY = 1000;
+                }
+            }
+
             function drawPayoffDiagram() {
-                // Clear the canvas
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                // Get values from inputs
-                const spotPrice = parseFloat(document.getElementById('spotPrice').value);
+                const spotPrice = parseFloat(spotPriceInput.value);
                 const legs = Array.from(legsContainer.children).map(legDiv => {
                     const strike = parseFloat(legDiv.querySelector('.leg-strike').value);
                     const type = legDiv.querySelector('.leg-type').value;
@@ -246,19 +400,16 @@
                     const lotSize = parseFloat(legDiv.querySelector('.leg-lot-size').value);
                     return { strike, type, action, premium, numberOfLots, lotSize };
                 });
+
+                const minPrice = chartState.minPrice;
+                const maxPrice = chartState.maxPrice;
+                const chartMinY = chartState.chartMinY;
+                const chartMaxY = chartState.chartMaxY;
                 
-                // Determine price range for the graph
-                const range = 500;
-                const minPrice = spotPrice - range;
-                const maxPrice = spotPrice + range;
                 const priceStep = 1;
 
-                // Calculate P&L points
                 const points = [];
-                let maxProfit = -Infinity;
-                let maxLoss = Infinity;
-                let breakevens = [];
-
+                
                 for (let price = minPrice; price <= maxPrice; price += priceStep) {
                     let pl = 0;
                     legs.forEach(leg => {
@@ -266,40 +417,47 @@
                             pl += calculateLegPL(price, leg.action, leg.type, leg.strike, leg.premium, leg.numberOfLots, leg.lotSize);
                         }
                     });
-                    
                     points.push({ x: price, y: pl });
-                    if (pl > maxProfit) maxProfit = pl;
-                    if (pl < maxLoss) maxLoss = pl;
-                    
-                    if (pl >= 0 && points.length > 1 && points[points.length-2].y < 0) {
-                        const p1 = points[points.length-2];
-                        const p2 = points[points.length-1];
-                        const slope = (p2.y - p1.y) / (p2.x - p1.x);
-                        const breakeven = p1.x - (p1.y / slope);
-                        breakevens.push(breakeven);
-                    }
                 }
 
-                // Scale for drawing
-                const padding = 20;
+                const padding = 50;
                 const canvasWidth = canvas.width - padding * 2;
                 const canvasHeight = canvas.height - padding * 2;
+                
+                if (points.length === 0 || !isFinite(spotPrice)) {
+                    const originX = padding;
+                    const originY = padding + canvasHeight;
+                    ctx.strokeStyle = '#d1d5db'; 
+                    ctx.lineWidth = 1; 
+                    ctx.beginPath();
+                    ctx.moveTo(originX, originY);
+                    ctx.lineTo(originX + canvasWidth, originY);
+                    ctx.stroke();
 
-                const allY = points.map(p => p.y);
-                const minY = Math.min(...allY);
-                const maxY = Math.max(...allY);
-                const chartMinY = minY - (maxY - minY) * 0.1;
-                const chartMaxY = maxY + (maxY - minY) * 0.1;
+                    ctx.fillStyle = '#2d3748';
+                    ctx.font = '12px Inter';
+                    ctx.textAlign = 'right';
+                    ctx.fillText('0', originX - 10, originY);
+                    ctx.textAlign = 'left';
+                    ctx.fillText('0', originX + canvasWidth + 10, originY);
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Stock Price', originX + canvasWidth / 2, originY + 35);
+                    ctx.save();
+                    ctx.translate(originX - 45, originY - canvasHeight / 2);
+                    ctx.rotate(-Math.PI / 2);
+                    ctx.fillText('Profit & Loss', 0, 0);
+                    ctx.restore();
+                    return;
+                }
 
                 const xScale = canvasWidth / (maxPrice - minPrice);
                 const yScale = canvasHeight / (chartMaxY - chartMinY);
 
                 const originX = padding;
                 const originY = padding + canvasHeight;
-
-                // Draw shaded areas
-                ctx.save();
                 const yZero = originY - (0 - chartMinY) * yScale;
+
+                ctx.save();
                 ctx.beginPath();
                 ctx.moveTo(originX, yZero);
                 points.forEach(point => {
@@ -311,16 +469,24 @@
                 ctx.closePath();
 
                 ctx.clip();
-                ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
-                ctx.fillRect(originX, originY - (Math.max(0, chartMaxY) - chartMinY) * yScale, canvasWidth, (Math.max(0, chartMaxY) - chartMinY) * yScale);
-                ctx.fillStyle = 'rgba(244, 67, 54, 0.3)';
-                ctx.fillRect(originX, yZero, canvasWidth, (Math.max(0, chartMinY) - chartMinY) * yScale);
+                
+                const profitGradient = ctx.createLinearGradient(0, yZero, 0, 0);
+                profitGradient.addColorStop(0, 'rgba(76, 175, 80, 0.3)');
+                profitGradient.addColorStop(1, 'rgba(76, 175, 80, 0.5)');
+                ctx.fillStyle = profitGradient;
+                ctx.fillRect(originX, 0, canvasWidth, yZero);
+
+                const lossGradient = ctx.createLinearGradient(0, yZero, 0, canvas.height);
+                lossGradient.addColorStop(0, 'rgba(244, 67, 54, 0.3)');
+                lossGradient.addColorStop(1, 'rgba(244, 67, 54, 0.5)');
+                ctx.fillStyle = lossGradient;
+                ctx.fillRect(originX, yZero, canvasWidth, canvas.height - yZero);
+                
                 ctx.restore();
 
-                // Draw axes
                 ctx.save();
-                ctx.strokeStyle = '#a0aec0';
-                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#d1d5db'; 
+                ctx.lineWidth = 1; 
 
                 ctx.beginPath();
                 ctx.moveTo(originX, yZero);
@@ -335,8 +501,8 @@
                 ctx.stroke();
                 ctx.setLineDash([]);
 
-                ctx.strokeStyle = '#48bb78';
-                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#4a5568'; 
+                ctx.lineWidth = 1.5; 
                 ctx.beginPath();
                 
                 points.forEach((point, index) => {
@@ -350,13 +516,13 @@
                 });
                 ctx.stroke();
 
-                // Draw labels and markers
                 ctx.fillStyle = '#2d3748';
                 ctx.font = '12px Inter';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
 
-                const tickInterval = 50; 
+                const xRange = maxPrice - minPrice;
+                const tickInterval = getNiceTickInterval(xRange, 10); 
                 const startPrice = Math.floor(minPrice / tickInterval) * tickInterval;
                 const endPrice = Math.ceil(maxPrice / tickInterval) * tickInterval;
 
@@ -370,30 +536,62 @@
 
                     ctx.fillText(price.toFixed(0), x, yZero + 15);
                 }
-
-                const yLabels = [chartMinY, 0, chartMaxY];
-                yLabels.forEach(label => {
-                    const y = originY - (label - chartMinY) * yScale;
-                    ctx.fillText(label.toFixed(0), originX - 15, y);
-                });
-
+                
+                ctx.textAlign = 'center';
                 ctx.fillText('Stock Price', originX + canvasWidth / 2, yZero + 35);
-                ctx.save();
-                ctx.translate(originX - 35, originY - canvasHeight / 2);
-                ctx.rotate(-Math.PI / 2);
-                ctx.fillText('Profit/Loss', 0, 0);
-                ctx.restore();
 
-                ctx.fillText('Spot', xSpot, originY - canvasHeight - 10);
+                ctx.fillText(`Spot: ${spotPrice.toFixed(0)}`, xSpot, originY - canvasHeight - 10);
+
+                const numTicks = 7;
+                const yTickInterval = (chartMaxY - chartMinY) / numTicks;
+
+                ctx.textAlign = 'right';
+                for (let i = 0; i <= numTicks; i++) {
+                    const plValue = chartMinY + i * yTickInterval;
+                    const y = originY - (plValue - chartMinY) * yScale;
+
+                    ctx.fillText(plValue.toFixed(0), originX - 10, y);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(originX, y);
+                    ctx.lineTo(originX - 5, y);
+                    ctx.stroke();
+                }
+
+                ctx.textAlign = 'left';
+                for (let i = 0; i <= numTicks; i++) {
+                    const plValue = chartMinY + i * yTickInterval;
+                    const y = originY - (plValue - chartMinY) * yScale;
+
+                    ctx.fillText(plValue.toFixed(0), originX + canvasWidth + 10, y);
+
+                    ctx.beginPath();
+                    ctx.moveTo(originX + canvasWidth, y);
+                    ctx.lineTo(originX + canvasWidth + 5, y);
+                    ctx.stroke();
+                }
+                
+                ctx.textAlign = 'right';
+                ctx.fillText('0', originX - 10, yZero);
+                ctx.textAlign = 'left';
+                ctx.fillText('0', originX + canvasWidth + 10, yZero);
+
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.save();
+                ctx.translate(originX - 45, originY - canvasHeight / 2);
+                ctx.rotate(-Math.PI / 2);
+                ctx.fillText('Profit & Loss', 0, 0);
+                ctx.restore();
 
                 if(hoverPrice !== null) {
                     const x = originX + (hoverPrice - minPrice) * xScale;
                     ctx.beginPath();
-                    ctx.strokeStyle = '#4299e1'; // Blue color
+                    ctx.strokeStyle = '#4299e1'; 
                     ctx.lineWidth = 1;
                     ctx.setLineDash([5, 5]);
-                    ctx.moveTo(x, yZero);
-                    ctx.lineTo(x, originY - canvasHeight);
+                    ctx.moveTo(x, padding);
+                    ctx.lineTo(x, canvas.height - padding);
                     ctx.stroke();
                     ctx.setLineDash([]);
                 }
@@ -414,7 +612,7 @@
                         <div class="flex items-end gap-2 mt-2">
                             <div class="flex flex-col items-center w-1/3">
                                 <label for="leg${legCounter}-strike">Strike Price:</label>
-                                <input type="number" class="leg-strike w-full" id="leg${legCounter}-strike" placeholder="Strike Price" value="${document.getElementById('spotPrice').value}">
+                                <input type="number" class="leg-strike w-full" id="leg${legCounter}-strike" placeholder="Strike Price" value="${spotPriceInput.value}">
                             </div>
                             <div class="flex flex-col items-center w-1/3">
                                 <label for="leg${legCounter}-lots">Number of Lots:</label>
@@ -449,19 +647,22 @@
                 `;
                 legsContainer.appendChild(newLegDiv);
                 
-                // Add event listeners to the new inputs
                 const newInputs = newLegDiv.querySelectorAll('input, select');
                 newInputs.forEach(input => {
-                    input.addEventListener('input', drawPayoffDiagram);
+                    input.addEventListener('input', () => {
+                        calculateInitialPriceRange();
+                        drawPayoffDiagram();
+                    });
                 });
                 
-                // Add event listener to the new remove button
                 newLegDiv.querySelector('.remove-leg-btn').addEventListener('click', () => {
                     newLegDiv.remove();
                     reNumberLegs();
+                    calculateInitialPriceRange();
                     drawPayoffDiagram();
                 });
 
+                calculateInitialPriceRange();
                 drawPayoffDiagram();
             }
 
@@ -476,23 +677,88 @@
                 legCounter = legContainers.length;
             }
 
+            function handleZoom(factor) {
+                const priceRange = chartState.maxPrice - chartState.minPrice;
+                const newPriceRange = priceRange * factor;
+                const centerPrice = (chartState.minPrice + chartState.maxPrice) / 2;
+                
+                chartState.minPrice = centerPrice - newPriceRange / 2;
+                chartState.maxPrice = centerPrice + newPriceRange / 2;
+                
+                const yRange = chartState.chartMaxY - chartState.chartMinY;
+                const newYRange = yRange * factor;
+                const centerY = (chartState.chartMinY + chartState.chartMaxY) / 2;
+                
+                chartState.chartMinY = centerY - newYRange / 2;
+                chartState.chartMaxY = centerY + newYRange / 2;
+
+                drawPayoffDiagram();
+            }
+
+            function handleReset() {
+                calculateInitialPriceRange();
+                drawPayoffDiagram();
+            }
+
             addLegBtn.addEventListener('click', addLeg);
             fetchPriceBtn.addEventListener('click', fetchNiftyPrice);
+            zoomInBtn.addEventListener('click', () => handleZoom(0.8));
+            zoomOutBtn.addEventListener('click', () => handleZoom(1.25));
+            resetBtn.addEventListener('click', handleReset);
 
-            // Add interactivity to the canvas
+            canvas.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+                canvas.classList.add('grabbing');
+            });
+            
+            canvas.addEventListener('mouseup', () => {
+                isDragging = false;
+                canvas.classList.remove('grabbing');
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                isDragging = false;
+                canvas.classList.remove('grabbing');
+            });
+            
             canvas.addEventListener('mousemove', (e) => {
                 const rect = canvas.getBoundingClientRect();
                 const x = e.offsetX;
                 const y = e.offsetY;
                 
-                const padding = 20;
+                const padding = 50;
                 const canvasWidth = canvas.width - padding * 2;
                 const canvasHeight = canvas.height - padding * 2;
-                const spotPrice = parseFloat(document.getElementById('spotPrice').value);
-                const range = 500;
-                const minPrice = spotPrice - range;
-                const maxPrice = spotPrice + range;
+                
+                const minPrice = chartState.minPrice;
+                const maxPrice = chartState.maxPrice;
                 const xScale = canvasWidth / (maxPrice - minPrice);
+
+                const chartMinY = chartState.chartMinY;
+                const chartMaxY = chartState.chartMaxY;
+                const yScale = canvasHeight / (chartMaxY - chartMinY);
+
+                if (isDragging) {
+                    const dx = e.clientX - lastMouseX;
+                    const dy = e.clientY - lastMouseY;
+                    
+                    const priceDelta = dx / xScale;
+                    chartState.minPrice -= priceDelta;
+                    chartState.maxPrice -= priceDelta;
+                    
+                    const plDelta = dy / yScale;
+                    chartState.chartMinY += plDelta;
+                    chartState.chartMaxY += plDelta;
+
+                    lastMouseX = e.clientX;
+                    lastMouseY = e.clientY;
+
+                    drawPayoffDiagram();
+                    tooltip.style.display = 'none';
+                    return;
+                }
                 
                 if (x >= padding && x <= canvas.width - padding && y >= padding && y <= canvas.height - padding) {
                     hoverPrice = minPrice + (x - padding) / xScale;
@@ -507,14 +773,13 @@
                         const lotSize = parseFloat(legDiv.querySelector('.leg-lot-size').value);
                         return { strike, type, action, premium, numberOfLots, lotSize };
                     });
-
+                    
                     legs.forEach(leg => {
                         if (!isNaN(leg.strike) && !isNaN(leg.premium) && !isNaN(leg.numberOfLots) && !isNaN(leg.lotSize)) {
                             pl += calculateLegPL(hoverPrice, leg.action, leg.type, leg.strike, leg.premium, leg.numberOfLots, leg.lotSize);
                         }
                     });
 
-                    // Position the tooltip relative to the canvas container
                     const containerRect = canvas.parentElement.getBoundingClientRect();
                     tooltip.style.left = `${e.clientX - containerRect.left + 15}px`;
                     tooltip.style.top = `${e.clientY - containerRect.top - 30}px`;
@@ -539,12 +804,20 @@
                 drawPayoffDiagram();
             });
 
+            calculateInitialPriceRange();
             resizeCanvas();
             window.addEventListener('resize', resizeCanvas);
 
-            // Initial draw for the first leg
+            spotPriceInput.addEventListener('input', () => {
+                calculateInitialPriceRange();
+                drawPayoffDiagram();
+            });
+
             document.querySelectorAll('.leg-container input, .leg-container select').forEach(input => {
-                input.addEventListener('input', drawPayoffDiagram);
+                input.addEventListener('input', () => {
+                    calculateInitialPriceRange();
+                    drawPayoffDiagram();
+                });
             });
         };
     </script>
