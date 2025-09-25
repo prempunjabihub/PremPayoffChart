@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Options Payoff Diagram</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Light Theme */
+            --bg-body: #f7fafc;
+            --text-color: #2d3748;
+            --container-bg: #ffffff;
+            --container-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --border-color: #cbd5e0;
+            --input-bg: #edf2f7;
+            --title-border: #a0aec0;
+            --brand-color: rgba(74, 85, 104, 0.7);
+            --chart-border: #d1d5db;
+            --chart-bg: #ffffff;
+            --profit-fill: rgba(76, 175, 80, 0.3);
+            --loss-fill: rgba(244, 67, 54, 0.3);
+            --line-color: #4a5568;
+            --toggle-bg: #e2e8f0;
+            --toggle-text: #2d3748;
+            --text-axes-color: #6b7280;
+            --remove-btn-color: #f56565;
+            --header-text-color: #2d3748;
+            --label-text-color: #4a5568;
+        }
+        
+        body.dark-mode {
+            /* Dark Theme */
+            --bg-body: linear-gradient(135deg, #1e3a8a 0%, #064e3b 100%);
+            --text-color: #e2e8f0;
+            --container-bg: rgba(255, 255, 255, 0.15);
+            --container-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15);
+            --border-color: rgba(255, 255, 255, 0.3);
+            --input-bg: rgba(255, 255, 255, 0.1);
+            --title-border: rgba(255, 255, 255, 0.2);
+            --brand-color: rgba(255, 255, 255, 0.6);
+            --chart-border: rgba(255, 255, 255, 0.2);
+            --chart-bg: rgba(255, 255, 255, 0.1);
+            --profit-fill: rgba(112, 204, 112, 0.4);
+            --loss-fill: rgba(255, 99, 71, 0.4);
+            --line-color: #f7fafc;
+            --toggle-bg: rgba(255, 255, 255, 0.1);
+            --toggle-text: #f7fafc;
+            --text-axes-color: #e2e8f0;
+            --remove-btn-color: rgba(244, 63, 94, 0.8);
+            --header-text-color: #f7fafc;
+            --label-text-color: #e2e8f0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-body);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+            transition: background 0.5s ease;
+        }
+
+        .container {
+            background-color: var(--container-bg);
+            border-radius: 1.5rem;
+            box-shadow: var(--container-shadow);
+            padding: 1.5rem; /* Reduced padding for mobile */
+            max-width: 900px;
+            width: 100%;
+            border: 1px solid var(--border-color);
+            transition: all 0.5s ease;
+        }
+        
+        @media (min-width: 768px) {
+            .container {
+                padding: 2.5rem;
+            }
+        }
+
+        canvas {
+            background-color: var(--chart-bg);
+            border-radius: 0.5rem;
+            position: relative;
+            cursor: grab;
+            border: 1px solid var(--chart-border);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            transition: all 0.5s ease;
+        }
+        
+        canvas.grabbing {
+            cursor: grabbing;
+        }
+
+        .input-group input, .input-group select {
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            width: 100%;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .input-group input:focus, .input-group select:focus {
+            outline: none;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
+        }
+
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .section-header {
+            color: var(--header-text-color);
+            transition: color 0.5s ease;
+        }
+        
+        .input-label {
+            color: var(--label-text-color);
+            transition: color 0.5s ease;
+        }
+
+        .title {
+            border-bottom: 2px solid var(--title-border);
+            padding-bottom: 1rem;
+            margin-bottom: 2rem;
+            color: var(--text-color);
+            transition: color 0.5s ease;
+        }
+
+        #tooltip {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            color: #ffffff;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            pointer-events: none;
+            z-index: 10;
+            white-space: nowrap;
+            display: none;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .add-leg-btn {
+            background-color: #4299e1;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            display: block;
+            width: 100%;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .add-leg-btn:hover {
+            background-color: #3182ce;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            transform: translateY(-2px);
+        }
+        
+        .leg-container {
+            border: 1px solid var(--border-color);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            margin-bottom: 1.5rem;
+            background-color: var(--container-bg);
+            transition: all 0.5s ease;
+        }
+        
+        .fetch-btn {
+            background-color: #48bb78;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            display: block;
+            width: 100%;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .fetch-btn:hover {
+            background-color: #38a169;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .remove-leg-btn {
+            background: none;
+            border: none;
+            color: var(--remove-btn-color);
+            font-size: 2rem;
+            font-weight: bold;
+            line-height: 1;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+        .remove-leg-btn:hover {
+            color: #e53e3e;
+        }
+        
+        body.dark-mode .remove-leg-btn:hover {
+            color: #f87171;
+        }
+
+        .brand {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--brand-color);
+            pointer-events: none;
+            transition: color 0.5s ease;
+        }
+
+        .theme-toggle-container {
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            z-index: 50;
+        }
+
+        #themeToggleBtn {
+            background: var(--toggle-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--toggle-text);
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+            transition: all 0.3s ease;
+        }
+
+        #themeToggleBtn:hover {
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+
+        #themeToggleBtn:active {
+            transform: translateY(1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .chart-controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 20;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .chart-controls button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            color: var(--toggle-text);
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+            transition: background 0.3s ease, box-shadow 0.3s ease, transform 0.1s ease;
+        }
+
+        .chart-controls button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .chart-controls button:active {
+            transform: translateY(1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center p-4 min-h-screen">
+    <div class="theme-toggle-container">
+        <button id="themeToggleBtn">Dark Mode</button>
+    </div>
+    <div class="brand">- for Prem Punjabi</div>
+
+    <div class="container mx-auto rounded-xl shadow-lg">
+        <h1 class="text-3xl font-bold text-center mb-6 title">Options Payoff Diagram</h1>
+
+        <!-- Input Section -->
+        <div>
+            <h2 class="text-xl font-semibold mb-4 section-header">Strategy Parameters</h2>
+            <div class="input-group">
+                <label for="spotPrice" class="input-label">Current Spot Price:</label>
+                <input type="number" id="spotPrice" value="24000">
+            </div>
+
+            <button id="fetchPriceBtn" class="fetch-btn">Shuffle Price</button>
+
+            <div id="legsContainer">
+                <!-- Initial Leg 1 -->
+                <div class="leg-container">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-lg font-medium mt-4 mb-2 flex-grow text-center section-header">Leg 1</h3>
+                        <button class="remove-leg-btn text-2xl font-bold leading-none">&times;</button>
+                    </div>
+                    <div class="input-group">
+                        <div class="flex flex-col md:flex-row items-end gap-2 mt-2">
+                            <div class="flex flex-col items-center w-full md:w-1/3">
+                                <label for="leg1-strike" class="input-label">Strike Price:</label>
+                                <input type="number" class="leg-strike w-full" id="leg1-strike" value="24000" placeholder="Strike Price">
+                            </div>
+                            <div class="flex flex-col items-center w-full md:w-1/3">
+                                <label for="leg1-lots" class="input-label">Number of Lots:</label>
+                                <input type="number" class="leg-lots w-full" id="leg1-lots" value="1" placeholder="Lots">
+                            </div>
+                            <div class="flex flex-col items-center w-full md:w-1/3">
+                                <label for="leg1-lot-size" class="input-label">Lot Size:</label>
+                                <input type="number" class="leg-lot-size w-full" id="leg1-lot-size" value="75" placeholder="Lot Size">
+                            </div>
+                        </div>
+                        <div class="flex flex-col md:flex-row items-end gap-2 mt-2">
+                            <div class="flex flex-col items-center w-full md:w-1/3">
+                                <select class="leg-type w-full">
+                                    <option value="call" selected>Call</option>
+                                    <option value="put">Put</option>
+                                </select>
+                                <span class="input-label">Option Type</span>
+                            </div>
+                            <div class="flex flex-col items-center w-full md:w-1/3">
+                                <select class="leg-action w-full">
+                                    <option value="buy" selected>Buy</option>
+                                    <option value="sell">Sell</option>
+                                </select>
+                                <span class="input-label">Buy / Sell</span>
+                            </div>
+                            <div class="flex flex-col items-center w-full md:w-1/3">
+                                <input type="number" class="leg-premium w-full" placeholder="Premium" value="110">
+                                <span class="input-label">Premium</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Dynamic legs will be added here -->
+            </div>
+
+            <button id="addLegBtn" class="add-leg-btn">+ Add More Legs</button>
+        </div>
+        
+        <!-- Canvas for the payoff diagram and tooltip container -->
+        <div class="relative w-full mt-6">
+            <div class="chart-controls">
+                <button id="zoomInBtn">+</button>
+                <button id="zoomOutBtn">-</button>
+                <button id="resetBtn">Reset</button>
+            </div>
+            <canvas id="payoffCanvas" class="w-full border-2 rounded-lg"></canvas>
+            <div id="tooltip" class="absolute hidden"></div>
+        </div>
+    </div>
+
+    <script>
+        window.onload = function() {
+            const canvas = document.getElementById('payoffCanvas');
+            const ctx = canvas.getContext('2d');
+            const legsContainer = document.getElementById('legsContainer');
+            const addLegBtn = document.getElementById('addLegBtn');
+            const fetchPriceBtn = document.getElementById('fetchPriceBtn');
+            const spotPriceInput = document.getElementById('spotPrice');
+            const tooltip = document.getElementById('tooltip');
+            const zoomInBtn = document.getElementById('zoomInBtn');
+            const zoomOutBtn = document.getElementById('zoomOutBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            const themeToggleBtn = document.getElementById('themeToggleBtn');
+            const body = document.body;
+
+            let legCounter = 1;
+            let hoverPrice = null;
+            let chartState = { minPrice: 0, maxPrice: 0, chartMinY: 0, chartMaxY: 0, initialMinY: 0, initialMaxY: 0 };
+            let isDragging = false;
+            let lastMouseX = 0;
+            let lastMouseY = 0;
+
+            function applyTheme(theme) {
+                if (theme === 'dark') {
+                    body.classList.add('dark-mode');
+                    themeToggleBtn.textContent = 'Light Mode';
+                    localStorage.setItem('theme', 'dark');
+                } else {
+                    body.classList.remove('dark-mode');
+                    themeToggleBtn.textContent = 'Dark Mode';
+                    localStorage.setItem('theme', 'light');
+                }
+                drawPayoffDiagram();
+            }
+
+            function toggleTheme() {
+                if (body.classList.contains('dark-mode')) {
+                    applyTheme('light');
+                } else {
+                    applyTheme('dark');
+                }
+            }
+
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme) {
+                applyTheme(savedTheme);
+            } else {
+                applyTheme('light');
+            }
+
+            themeToggleBtn.addEventListener('click', toggleTheme);
+
+            function resizeCanvas() {
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.width / (16 / 10);
+                drawPayoffDiagram();
+            }
+            
+            function fetchNiftyPrice() {
+                const currentPrice = parseFloat(spotPriceInput.value);
+                const newPrice = currentPrice + (Math.random() * 50 - 25);
+                spotPriceInput.value = newPrice.toFixed(2);
+                drawPayoffDiagram();
+            }
+
+            function calculateLegPL(stockPrice, action, type, strike, premium, numberOfLots, lotSize) {
+                let pl = 0;
+                if (type === 'call') {
+                    if (action === 'buy') {
+                        pl = Math.max(0, stockPrice - strike) - premium;
+                    } else { // sell
+                        pl = Math.min(0, strike - stockPrice) + premium;
+                    }
+                } else { // put
+                    if (action === 'buy') {
+                        pl = Math.max(0, strike - stockPrice) - premium;
+                    } else { // sell
+                        pl = Math.min(0, stockPrice - strike) + premium;
+                    }
+                }
+                return pl * numberOfLots * lotSize;
+            }
+
+            function getNiceTickInterval(range, maxTicks) {
+                const rawInterval = range / maxTicks;
+                const powerOf10 = Math.pow(10, Math.floor(Math.log10(rawInterval)));
+                const niceNumbers = [1, 2, 5];
+                let niceInterval = Infinity;
+                
+                for (let i = 0; i < niceNumbers.length; i++) {
+                    const currentNice = niceNumbers[i] * powerOf10;
+                    if (currentNice >= rawInterval) {
+                        niceInterval = currentNice;
+                        break;
+                    }
+                }
+
+                if (niceInterval === Infinity) {
+                    niceInterval = 10 * powerOf10;
+                }
+                
+                return niceInterval;
+            }
+
+            function calculateInitialPriceRange() {
+                const spotPrice = parseFloat(spotPriceInput.value);
+                const legs = Array.from(legsContainer.children).map(legDiv => {
+                    const strike = parseFloat(legDiv.querySelector('.leg-strike').value);
+                    const premium = parseFloat(legDiv.querySelector('.leg-premium').value);
+                    const numberOfLots = parseFloat(legDiv.querySelector('.leg-lots').value);
+                    const lotSize = parseFloat(legDiv.querySelector('.leg-lot-size').value);
+                    const action = legDiv.querySelector('.leg-action').value;
+                    const type = legDiv.querySelector('.leg-type').value;
+                    return { strike, premium, numberOfLots, lotSize, action, type };
+                });
+                
+                let totalPremium = 0;
+                let minStrike = Infinity;
+                let maxStrike = -Infinity;
+                
+                legs.forEach(leg => {
+                    if (isFinite(leg.premium) && isFinite(leg.numberOfLots) && isFinite(leg.lotSize)) {
+                        totalPremium += leg.premium;
+                    }
+                    if (isFinite(leg.strike)) {
+                        minStrike = Math.min(minStrike, leg.strike);
+                        maxStrike = Math.max(maxStrike, leg.strike);
+                    }
+                });
+
+                const premiumBuffer = totalPremium * 2;
+                let minPrice = (minStrike === Infinity) ? spotPrice - 300 : minStrike - premiumBuffer;
+                let maxPrice = (maxStrike === -Infinity) ? spotPrice + 300 : maxStrike + premiumBuffer;
+                
+                if (!isFinite(minPrice) || !isFinite(maxPrice)) {
+                  minPrice = spotPrice - 300;
+                  maxPrice = spotPrice + 300;
+                }
+
+                chartState.minPrice = minPrice;
+                chartState.maxPrice = maxPrice;
+
+                const priceStep = 1;
+                const points = [];
+                
+                for (let price = minPrice; price <= maxPrice; price += priceStep) {
+                    let pl = 0;
+                    legs.forEach(leg => {
+                        if (isFinite(leg.strike) && isFinite(leg.premium) && isFinite(leg.numberOfLots) && isFinite(leg.lotSize)) {
+                            pl += calculateLegPL(price, leg.action, leg.type, leg.strike, leg.premium, leg.numberOfLots, leg.lotSize);
+                        }
+                    });
+                    if (isFinite(pl)) {
+                        points.push({ x: price, y: pl });
+                    }
+                }
+
+                if (points.length > 0) {
+                    const allY = points.map(p => p.y);
+                    const minY = Math.min(...allY);
+                    const maxY = Math.max(...allY);
+                    
+                    const yRange = maxY - minY;
+                    let chartMinY = minY - yRange * 0.1;
+                    let chartMaxY = maxY + yRange * 0.1;
+
+                    if (!isFinite(yRange) || yRange === 0) {
+                        chartMinY = -100;
+                        chartMaxY = 100;
+                    }
+                    
+                    chartState.chartMinY = chartMinY;
+                    chartState.chartMaxY = chartMaxY;
+                    chartState.initialMinY = chartMinY;
+                    chartState.initialMaxY = chartMaxY;
+                } else {
+                    chartState.chartMinY = -100;
+                    chartState.chartMaxY = 100;
+                    chartState.initialMinY = -100;
+                    chartState.initialMaxY = 100;
+                }
+            }
+
+            function drawPayoffDiagram() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                const textAxesColor = getComputedStyle(body).getPropertyValue('--text-axes-color');
+
+                const spotPrice = parseFloat(spotPriceInput.value);
+                const legs = Array.from(legsContainer.children).map(legDiv => {
+                    const strike = parseFloat(legDiv.querySelector('.leg-strike').value);
+                    const type = legDiv.querySelector('.leg-type').value;
+                    const action = legDiv.querySelector('.leg-action').value;
+                    const premium = parseFloat(legDiv.querySelector('.leg-premium').value);
+                    const numberOfLots = parseFloat(legDiv.querySelector('.leg-lots').value);
+                    const lotSize = parseFloat(legDiv.querySelector('.leg-lot-size').value);
+                    return { strike, type, action, premium, numberOfLots, lotSize };
+                });
+
+                const minPrice = chartState.minPrice;
+                const maxPrice = chartState.maxPrice;
+                const chartMinY = chartState.chartMinY;
+                const chartMaxY = chartState.chartMaxY;
+                
+                const priceStep = 1;
+
+                const points = [];
+                
+                for (let price = minPrice; price <= maxPrice; price += priceStep) {
+                    let pl = 0;
+                    legs.forEach(leg => {
+                        if (isFinite(leg.strike) && isFinite(leg.premium) && isFinite(leg.numberOfLots) && isFinite(leg.lotSize)) {
+                            pl += calculateLegPL(price, leg.action, leg.type, leg.strike, leg.premium, leg.numberOfLots, leg.lotSize);
+                        }
+                    });
+                    if (isFinite(pl)) {
+                        points.push({ x: price, y: pl });
+                    }
+                }
+
+                const padding = 50;
+                const canvasWidth = canvas.width - padding * 2;
+                const canvasHeight = canvas.height - padding * 2;
+                
+                if (points.length === 0 || !isFinite(spotPrice) || !isFinite(minPrice) || !isFinite(maxPrice)) {
+                    const originX = padding;
+                    const originY = padding + canvasHeight;
+                    ctx.strokeStyle = textAxesColor; 
+                    ctx.lineWidth = 1; 
+                    ctx.beginPath();
+                    ctx.moveTo(originX, originY);
+                    ctx.lineTo(originX + canvasWidth, originY);
+                    ctx.stroke();
+
+                    ctx.fillStyle = textAxesColor;
+                    ctx.font = '12px Inter';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Please enter valid numerical inputs to draw the chart.', canvas.width / 2, canvas.height / 2);
+                    return;
+                }
+
+                const xScale = canvasWidth / (maxPrice - minPrice);
+                const yScale = canvasHeight / (chartMaxY - chartMinY);
+
+                if (!isFinite(xScale) || !isFinite(yScale)) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.font = '16px Inter';
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = textAxesColor;
+                    ctx.fillText('Please enter valid numerical inputs to draw the chart.', canvas.width / 2, canvas.height / 2);
+                    return;
+                }
+
+                const originX = padding;
+                const originY = padding + canvasHeight;
+                const yZero = originY - (0 - chartMinY) * yScale;
+
+                if (!isFinite(yZero)) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.font = '16px Inter';
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = textAxesColor;
+                    ctx.fillText('Chart could not be rendered with the provided values.', canvas.width / 2, canvas.height / 2);
+                    return;
+                }
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(originX, yZero);
+                points.forEach(point => {
+                    const x = originX + (point.x - minPrice) * xScale;
+                    const y = originY - (point.y - chartMinY) * yScale;
+                    ctx.lineTo(x, y);
+                });
+                ctx.lineTo(originX + canvasWidth, yZero);
+                ctx.closePath();
+
+                ctx.clip();
+                
+                const profitGradient = ctx.createLinearGradient(0, yZero, 0, 0);
+                const lossGradient = ctx.createLinearGradient(0, yZero, 0, canvas.height);
+
+                if (body.classList.contains('dark-mode')) {
+                    profitGradient.addColorStop(0, 'rgba(112, 204, 112, 0.4)');
+                    profitGradient.addColorStop(1, 'rgba(112, 204, 112, 0.6)');
+                    lossGradient.addColorStop(0, 'rgba(255, 99, 71, 0.4)');
+                    lossGradient.addColorStop(1, 'rgba(255, 99, 71, 0.6)');
+                } else {
+                    profitGradient.addColorStop(0, 'rgba(76, 175, 80, 0.3)');
+                    profitGradient.addColorStop(1, 'rgba(76, 175, 80, 0.5)');
+                    lossGradient.addColorStop(0, 'rgba(244, 67, 54, 0.3)');
+                    lossGradient.addColorStop(1, 'rgba(244, 67, 54, 0.5)');
+                }
+
+                ctx.fillStyle = profitGradient;
+                ctx.fillRect(originX, 0, canvasWidth, yZero);
+                ctx.fillStyle = lossGradient;
+                ctx.fillRect(originX, yZero, canvasWidth, canvas.height - yZero);
+                
+                ctx.restore();
+
+                ctx.save();
+                ctx.strokeStyle = textAxesColor; 
+                ctx.lineWidth = 1; 
+
+                ctx.beginPath();
+                ctx.moveTo(originX, yZero);
+                ctx.lineTo(originX + canvasWidth, yZero);
+                ctx.stroke();
+
+                const xSpot = originX + (spotPrice - minPrice) * xScale;
+                ctx.beginPath();
+                ctx.setLineDash([5, 5]);
+                ctx.moveTo(xSpot, originY);
+                ctx.lineTo(xSpot, originY - canvasHeight);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.strokeStyle = '#9ca3af';
+                ctx.lineWidth = 2.5; 
+                ctx.beginPath();
+                
+                points.forEach((point, index) => {
+                    const x = originX + (point.x - minPrice) * xScale;
+                    const y = originY - (point.y - chartMinY) * yScale;
+                    if (index === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                });
+                ctx.stroke();
+
+                ctx.fillStyle = textAxesColor;
+                ctx.font = '12px Inter';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                const xRange = maxPrice - minPrice;
+                const tickInterval = getNiceTickInterval(xRange, 10); 
+                const startPrice = Math.floor(minPrice / tickInterval) * tickInterval;
+                const endPrice = Math.ceil(maxPrice / tickInterval) * tickInterval;
+
+                for (let price = startPrice; price <= endPrice; price += tickInterval) {
+                    const x = originX + (price - minPrice) * xScale;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(x, yZero);
+                    ctx.lineTo(x, yZero + 5);
+                    ctx.stroke();
+
+                    ctx.fillText(price.toFixed(0), x, yZero + 15);
+                }
+                
+                ctx.textAlign = 'center';
+                ctx.fillText('Stock Price', originX + canvasWidth / 2, yZero + 35);
+
+                ctx.fillText(`Spot: ${spotPrice.toFixed(0)}`, xSpot, originY - canvasHeight - 10);
+
+                const numTicks = 7;
+                const yTickInterval = (chartMaxY - chartMinY) / numTicks;
+
+                ctx.textAlign = 'right';
+                for (let i = 0; i <= numTicks; i++) {
+                    const plValue = chartMinY + i * yTickInterval;
+                    const y = originY - (plValue - chartMinY) * yScale;
+
+                    ctx.fillText(plValue.toFixed(0), originX - 10, y);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(originX, y);
+                    ctx.lineTo(originX - 5, y);
+                    ctx.stroke();
+                }
+
+                ctx.textAlign = 'left';
+                for (let i = 0; i <= numTicks; i++) {
+                    const plValue = chartMinY + i * yTickInterval;
+                    const y = originY - (plValue - chartMinY) * yScale;
+
+                    ctx.fillText(plValue.toFixed(0), originX + canvasWidth + 10, y);
+
+                    ctx.beginPath();
+                    ctx.moveTo(originX + canvasWidth, y);
+                    ctx.lineTo(originX + canvasWidth + 5, y);
+                    ctx.stroke();
+                }
+                
+                ctx.textAlign = 'right';
+                ctx.fillText('0', originX - 10, yZero);
+                ctx.textAlign = 'left';
+                ctx.fillText('0', originX + canvasWidth + 10, yZero);
+
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.save();
+                ctx.translate(originX - 45, originY - canvasHeight / 2);
+                ctx.rotate(-Math.PI / 2);
+                ctx.fillText('Profit & Loss', 0, 0);
+                ctx.restore();
+
+                if(hoverPrice !== null) {
+                    const x = originX + (hoverPrice - minPrice) * xScale;
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#4299e1'; 
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([5, 5]);
+                    ctx.moveTo(x, padding);
+                    ctx.lineTo(x, canvas.height - padding);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
+                ctx.restore();
+            }
+
+            function addLeg() {
+                legCounter++;
+                const newLegDiv = document.createElement('div');
+                newLegDiv.classList.add('leg-container');
+                newLegDiv.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-lg font-medium mt-4 mb-2 flex-grow text-center section-header">Leg ${legCounter}</h3>
+                        <button class="remove-leg-btn text-2xl font-bold leading-none">&times;</button>
+                    </div>
+                    <div class="input-group">
+                        <div class="flex flex-col md:flex-row items-end gap-2 mt-2">
+                            <div class="flex flex-col items-center w-full md:w-1/3">
+                                <label for="leg${legCounter}-strike" class="input-label">Strike Price:</label>
+                                <input type="number" class="leg-strike w-full" id="leg${legCounter}-strike" placeholder="Strike Price" value="${spotPriceInput.value}">
+                            </div>
+                            <div class="flex flex-col items-center w-full md:w-1/3">
+                                <label for="leg${legCounter}-lots" class="input-label">Number of Lots:</label>
+                                <input type="number" class="leg-lots w-full" id="leg${legCounter}-lots" placeholder="Lots" value="1">
+                            </div>
+                            <div class="flex flex-col items-center w-full md:w-1/3">
+                                <label for="leg${legCounter}-lot-size" class="input-label">Lot Size:</label>
+                                <input type="number" class="leg-lot-size w-full" id="leg${legCounter}-lot-size" value="75" placeholder="Lot Size">
+                            </div>
+                        </div>
+                        <div class="flex flex-col md:flex-row items-end gap-2 mt-2">
+                            <div class="flex flex-col items-center w-full md:w-1/3">
+                                <select class="leg-type w-full">
+                                    <option value="call" selected>Call</option>
+                                    <option value="put">Put</option>
+                                </select>
+                                <span class="input-label">Option Type</span>
+                            </div>
+                            <div class="flex flex-col items-center w-full md:w-1/3">
+                                <select class="leg-action w-full">
+                                    <option value="buy" selected>Buy</option>
+                                    <option value="sell">Sell</option>
+                                </select>
+                                <span class="input-label">Buy / Sell</span>
+                            </div>
+                            <div class="flex flex-col items-center w-full md:w-1/3">
+                                <input type="number" class="leg-premium w-full" placeholder="Premium" value="110">
+                                <span class="input-label">Premium</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                legsContainer.appendChild(newLegDiv);
+                
+                const newInputs = newLegDiv.querySelectorAll('input, select');
+                newInputs.forEach(input => {
+                    input.addEventListener('input', () => {
+                        calculateInitialPriceRange();
+                        drawPayoffDiagram();
+                    });
+                });
+                
+                newLegDiv.querySelector('.remove-leg-btn').addEventListener('click', () => {
+                    newLegDiv.remove();
+                    reNumberLegs();
+                    calculateInitialPriceRange();
+                    drawPayoffDiagram();
+                });
+
+                calculateInitialPriceRange();
+                drawPayoffDiagram();
+            }
+
+            function reNumberLegs() {
+                const legContainers = legsContainer.querySelectorAll('.leg-container');
+                legContainers.forEach((container, index) => {
+                    const h3 = container.querySelector('h3');
+                    if (h3) {
+                        h3.textContent = `Leg ${index + 1}`;
+                    }
+                });
+                legCounter = legContainers.length;
+            }
+
+            function handleZoom(factor) {
+                const priceRange = chartState.maxPrice - chartState.minPrice;
+                const newPriceRange = priceRange * factor;
+                const centerPrice = (chartState.minPrice + chartState.maxPrice) / 2;
+                
+                chartState.minPrice = centerPrice - newPriceRange / 2;
+                chartState.maxPrice = centerPrice + newPriceRange / 2;
+                
+                const yRange = chartState.chartMaxY - chartState.chartMinY;
+                const newYRange = yRange * factor;
+                const centerY = (chartState.chartMinY + chartState.chartMaxY) / 2;
+                
+                chartState.chartMinY = centerY - newYRange / 2;
+                chartState.chartMaxY = centerY + newYRange / 2;
+
+                drawPayoffDiagram();
+            }
+
+            function handleReset() {
+                calculateInitialPriceRange();
+                drawPayoffDiagram();
+            }
+
+            addLegBtn.addEventListener('click', addLeg);
+            fetchPriceBtn.addEventListener('click', fetchNiftyPrice);
+            zoomInBtn.addEventListener('click', () => handleZoom(0.8));
+            zoomOutBtn.addEventListener('click', () => handleZoom(1.25));
+            resetBtn.addEventListener('click', handleReset);
+
+            canvas.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+                canvas.classList.add('grabbing');
+            });
+            
+            canvas.addEventListener('mouseup', () => {
+                isDragging = false;
+                canvas.classList.remove('grabbing');
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                isDragging = false;
+                canvas.classList.remove('grabbing');
+            });
+            
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.offsetX;
+                const y = e.offsetY;
+                
+                const padding = 50;
+                const canvasWidth = canvas.width - padding * 2;
+                const canvasHeight = canvas.height - padding * 2;
+                
+                const minPrice = chartState.minPrice;
+                const maxPrice = chartState.maxPrice;
+                const xScale = canvasWidth / (maxPrice - minPrice);
+
+                const chartMinY = chartState.chartMinY;
+                const chartMaxY = chartState.chartMaxY;
+                const yScale = canvasHeight / (chartMaxY - chartMinY);
+
+                if (isDragging) {
+                    const dx = e.clientX - lastMouseX;
+                    const dy = e.clientY - lastMouseY;
+                    
+                    const priceDelta = dx / xScale;
+                    chartState.minPrice -= priceDelta;
+                    chartState.maxPrice -= priceDelta;
+                    
+                    const plDelta = dy / yScale;
+                    chartState.chartMinY += plDelta;
+                    chartState.chartMaxY += plDelta;
+
+                    lastMouseX = e.clientX;
+                    lastMouseY = e.clientY;
+
+                    drawPayoffDiagram();
+                    tooltip.style.display = 'none';
+                    return;
+                }
+                
+                if (x >= padding && x <= canvas.width - padding && y >= padding && y <= canvas.height - padding) {
+                    hoverPrice = minPrice + (x - padding) / xScale;
+
+                    let pl = 0;
+                    const legs = Array.from(legsContainer.children).map(legDiv => {
+                        const strike = parseFloat(legDiv.querySelector('.leg-strike').value);
+                        const type = legDiv.querySelector('.leg-type').value;
+                        const action = legDiv.querySelector('.leg-action').value;
+                        const premium = parseFloat(legDiv.querySelector('.leg-premium').value);
+                        const numberOfLots = parseFloat(legDiv.querySelector('.leg-lots').value);
+                        const lotSize = parseFloat(legDiv.querySelector('.leg-lot-size').value);
+                        return { strike, type, action, premium, numberOfLots, lotSize };
+                    });
+                    
+                    legs.forEach(leg => {
+                        if (isFinite(leg.strike) && isFinite(leg.premium) && isFinite(leg.numberOfLots) && isFinite(leg.lotSize)) {
+                            pl += calculateLegPL(hoverPrice, leg.action, leg.type, leg.strike, leg.premium, leg.numberOfLots, leg.lotSize);
+                        }
+                    });
+
+                    const containerRect = canvas.parentElement.getBoundingClientRect();
+                    tooltip.style.left = `${e.clientX - containerRect.left + 15}px`;
+                    tooltip.style.top = `${e.clientY - containerRect.top - 30}px`;
+                    
+                    tooltip.textContent = `Price: ${hoverPrice.toFixed(2)} | P&L: ${pl.toFixed(2)}`;
+                    tooltip.style.display = 'block';
+                    drawPayoffDiagram();
+                } else {
+                    tooltip.style.display = 'none';
+                    hoverPrice = null;
+                    drawPayoffDiagram();
+                }
+            });
+
+            canvas.addEventListener('mouseenter', () => {
+                tooltip.style.display = 'block';
+            });
+            
+            canvas.addEventListener('mouseleave', () => {
+                tooltip.style.display = 'none';
+                hoverPrice = null;
+                drawPayoffDiagram();
+            });
+            
+            // Mouse wheel event listener for zooming
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault(); 
+                
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.offsetX;
+                const mouseY = e.offsetY;
+                
+                const padding = 50;
+                const canvasWidth = canvas.width - padding * 2;
+                const canvasHeight = canvas.height - padding * 2;
+
+                const priceAtMouse = chartState.minPrice + (mouseX - padding) / (canvasWidth / (chartState.maxPrice - chartState.minPrice));
+                const plAtMouse = chartState.chartMinY + (canvas.height - padding - mouseY) / (canvasHeight / (chartState.chartMaxY - chartState.chartMinY));
+
+                const zoomFactor = e.deltaY > 0 ? 1.1 : 0.9;
+
+                const newMinPrice = priceAtMouse - (priceAtMouse - chartState.minPrice) * zoomFactor;
+                const newMaxPrice = priceAtMouse + (chartState.maxPrice - priceAtMouse) * zoomFactor;
+
+                const newMinY = plAtMouse - (plAtMouse - chartState.chartMinY) * zoomFactor;
+                const newMaxY = plAtMouse + (chartState.chartMaxY - plAtMouse) * zoomFactor;
+                
+                chartState.minPrice = newMinPrice;
+                chartState.maxPrice = newMaxPrice;
+                chartState.chartMinY = newMinY;
+                chartState.chartMaxY = newMaxY;
+                
+                drawPayoffDiagram();
+            });
+
+
+            calculateInitialPriceRange();
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            spotPriceInput.addEventListener('input', () => {
+                calculateInitialPriceRange();
+                drawPayoffDiagram();
+            });
+
+            document.querySelectorAll('.leg-container input, .leg-container select').forEach(input => {
+                input.addEventListener('input', () => {
+                    calculateInitialPriceRange();
+                    drawPayoffDiagram();
+                });
+            });
+            
+            // Initial setup for the remove button of the first leg
+            const initialLeg = document.querySelector('.leg-container');
+            if(initialLeg) {
+                initialLeg.querySelector('.remove-leg-btn').addEventListener('click', () => {
+                    initialLeg.remove();
+                    reNumberLegs();
+                    calculateInitialPriceRange();
+                    drawPayoffDiagram();
+                });
+            }
+        };
+    </script>
+</body>
+</html>
